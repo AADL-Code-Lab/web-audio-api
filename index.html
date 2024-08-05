@@ -4,13 +4,13 @@
 <head>
 	<meta charset="utf-8" />
 	<meta name="viewport" content="width=device-width" />
-	<title>Frequency visualization</title>
+	<title>Decibel visualization</title>
 	<style>
 		html,
 		body {
 			height: 100%;
 			margin: 0;
-			background-color: black;
+			background-color: white;
 		}
 
 		.container {
@@ -77,13 +77,21 @@
 
 
 		#visualizer {
-			background-color: black;
 			margin: auto;
 			left: 50%;
 			top: 50%;
 			transform: translate(-50%, -50%);
 			position: absolute;
 			z-index: 10;
+		}
+
+		#background {
+			margin: auto;
+			left: 50%;
+			top: 50%;
+			transform: translate(-50%, -50%);
+			position: absolute;
+			z-index: 1;
 		}
 	</style>
 </head>
@@ -92,6 +100,7 @@
 	<div class="container">
 		<audio></audio>
 		<canvas id="visualizer" width="800" height="800"></canvas>
+		<canvas id="background" width="800" height="800"></canvas>
 		<div id="controls">
 			<input type="button" data-playing="false" role="switch" aria-checked="false" id="button" value="Play" />
 		</div>
@@ -103,16 +112,13 @@
 		let analyser;
 		let javascriptNode;
 		let bufferLength;
-		let frequencyArray;
 		let arrayBuffer;
-
 		const playButton = document.querySelector("#button");
 		const canvasElt = document.querySelector("#visualizer");
 		const canvasContext = canvasElt.getContext("2d");
-
-		const centerX = canvasElt.width / 2;
-		const centerY = canvasElt.height / 2;
-		const radius = 260;
+		const backgroundElt = document.querySelector("#background");
+		const backgroundContext = backgroundElt.getContext("2d");;
+		const bottomLeft = { x: 0, y: canvasElt.height }
 
 		playButton.addEventListener(
 			"click",
@@ -146,7 +152,6 @@
 			},
 			false
 		);
-
 		audioElement.addEventListener(
 			"ended",
 			() => {
@@ -155,7 +160,6 @@
 			},
 			false
 		);
-
 		function init() {
 			setSong();
 			audioContext = new AudioContext();
@@ -170,10 +174,7 @@
 			);
 			track.connect(audioContext.destination);
 			analyser = audioContext.createAnalyser();
-			analyser.fftSize = getVariableFour();
-			frequencyArray = new Uint8Array(
-				analyser.frequencyBinCount
-			);
+			analyser.fftSize = 2048;
 			bufferLength = analyser.frequencyBinCount;
 			dataArray = new Uint8Array(bufferLength);
 			track.connect(analyser);
@@ -192,8 +193,8 @@
 							canvasElt.width,
 							canvasElt.height
 						);
-						drawBars(data);
-						drawGradientCircle(data);
+						drawByte(data);
+						fillBackground();
 					});
 				}
 			}
@@ -219,141 +220,87 @@
 			return 20 * Math.log10(value + floor / 255);
 		}
 
-		function drawGradientCircle(db) {
-			const gradient = canvasContext.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
+		function drawByte(decibels) {
+			canvasContext.fillStyle = 'white';
+			const numPoints = 28;
+			const step = 13;
+			const angle = (2 * Math.PI) / numPoints;
 			canvasContext.beginPath();
-			canvasContext.arc(centerX, centerY, ((360 + (360 * (db / 255))) / 2), 0, 2 * Math.PI);
-			canvasContext.fillStyle = getVariableThree();
-			canvasContext.fill();
-			canvasContext.closePath();
-		}
-
-		function drawBars(db) {
-			const innerRadius = ((360 + (360 * (db / 255))) / 2) * 2.1;
-			const outerRadius = innerRadius + 100;
-			const barHeight = outerRadius - innerRadius;
-			const startAngle = Math.PI / 2;
-			const sampleRate = analyser.fftSize;
-			const angStep = getVariableOne();
-			const barWidth = (innerRadius * Math.PI * 2 / sampleRate) * 0.9;
-			const barWidthHalf = barWidth * 0.5;
-			canvasContext.beginPath();
-			for (let i = 0; i < dataArray.length; i++) {
-				const frequency = dataArray[i];
-				const color = getVariableTwo(frequency);
-				const ang = i * angStep + startAngle;
-				const xAx = Math.cos(ang);
-				const xAy = Math.sin(ang);
-				canvasContext.setTransform(xAx, xAy, -xAy, xAx, centerX, centerY);
-				canvasContext.fillStyle = color;
-				console.log(dataArray.length);
-				const barStuff = getVariableFive(frequency, innerRadius, outerRadius, sampleRate);
-				canvasContext.fillRect(barStuff[0], barStuff[1], barStuff[2], barStuff[3]);
-
+			const decibelVariable = 600 + decibels;
+			for (let i = 0; i <= numPoints; i++) {
+				const x = bottomLeft.x + decibelVariable * Math.cos(i * step * angle);
+				const y = bottomLeft.y + (600 + decibels) * Math.sin(i * step * angle);
+				if (i === 0) {
+					canvasContext.moveTo(x, y);
+				} else {
+					canvasContext.lineTo(x, y);
+				}
 			}
-
-			canvasContext.setTransform(1, 0, 0, 1, 0, 0);
-
+			canvasContext.closePath();
+			canvasContext.fill();
 		}
 
-		// Code lab! Try adjusting these variables. 
+		function fillBackground() {
+			const now = audioContext.currentTime;
+			const gradient = backgroundContext.createLinearGradient(0, 0, canvasElt.width * Math.cos(now), canvasElt.height * Math.sin(now));
+			gradient.addColorStop(0, getVariableOne());
+			gradient.addColorStop(.50, getVariableTwo());
+			backgroundContext.fillStyle = gradient;
+			backgroundContext.fillRect(0, 0, canvasElt.width, canvasElt.height);
+		}
+
+		// Code lab! Try adjusting the variables and functions. 
 
 		function setSong() {
-			audioElement.src = '/audio/running.mp3';
+			audioElement.src = '/audio/propagation.mp3';
 		}
 
 		function getVariableOne() {
+			const now = audioContext.currentTime;
+			const duration = audioElement.duration;
+
 			/*
-			This variable determines the angle at which bars are placed, and changes how many bars 
-			are visible.
+			This variable creates a background color for the AADL byte based on the duration 
+			of the song. Values in rgb format (red, green, blue) have a max value of 255 and a
+			minimum value of 0. It's useful to use known values like these as a way to prevent
+			broken values from sneaking in. In this example, we're dividing the current timestamp
+			by the full song duration to represent a percentage of the maximum value (255). That
+			way, the result will always fall between the minium and maximum.
 
-			Math.PI * 2 is the basis of the circle (in radians). Dividing that value by a power of 2
-			(32, 64, 128, 256, etc) .
+			By default, the red value is slowly reducing from the maximum value (255) by subtracting 
+			the current runtime expressed as a percentage of the maximum value. The green value is set
+			to zero. And the blue value will slowly increase from the minimum value based on the run time.
 
-			Try changing this to (Math.PI * 2) / 512 to get a more watercolour look
+			Try adjusting the red, green, and blue variables to change the background color!
+
+			Try changing the red value to "255 - (255 * (now * 5/ duration)))" — the colors will change faster,
+			because the "now" variable is being multiplied. This will result overflow values, but that's okay!
+
+			In the blue variable, try referencing red or green to make a new value. 
+			For example: 255 * (red / 255);
+			This creates a percentage of 255 based on the red and green values
 			*/
 
-			return (Math.PI * 2) / 128;
+			const red = 255 - (255 * (now / duration));
+			const green = red * .75;
+			const blue = 0;
+
+			return 'rgb(' + red + ', ' + green + ',' + blue + ')';
 		}
-
-		function getVariableTwo(frequency) {
-
-			/*
-			This variable creates a the color gradient for the frequency bars. Values in rgb format 
-			(red, green, blue) have a max value of 255 and a minimum value of 0. 
-
-			In this example, the frequency variable also has a maximum value of 255. Knowing this,
-			you can use the percentage of maximum value to create a more dynamic range of colors.
-
-			Try changing the green value to 180 * (frequency / 255)
-	
-			*/
-
-			const red = frequency;
-			const green = 180;
-			const blue = 255 - (255 * (frequency / 255));
-
-			return 'rgb(' + red + ',' + green + ',' + blue + ')';
-		}
-
-		function getVariableThree() {
+		function getVariableTwo() {
+			const now = audioContext.currentTime;
+			const duration = audioElement.duration;
 
 			/*
-			Some colors are available in the browser by their name! Try replacing "blanchedalmond" with
-			one of these: "black", "white", "gray", "silver", "maroon", "red", "purple", 
-			"fushsia", "green", "lime", "olive", "yellow", "gold", "navy", "blue", "teal", or "aqua"
-
-			Try changing the value to "transparent"
-
-			For a full list of these colors, visit: https://en.wikipedia.org/wiki/Web_colors
+			This variable creates a gradient color to contrast the color above. By default, 
+			0,0,0 returns black. Try changing each of these to numbers between 0 and 255.
 			*/
 
-			return 'blanchedalmond';
-		}
+			const red = 0;
+			const green = 0;
+			const blue = 0;
 
-		function getVariableFour() {
-			/*
-			This value is represents how many points of frequency data are retrieved from each sample.
-			MUST return a power of two. Specifically, one of: 32, 64, 128, 256, 512, 1024, 2048, 4096.
-			Any higher values might make your computer sweat a little bit!
-
-			Try setting the value lower, and you'll see few points of data represented.
-
-			*/
-
-			return 2048;
-		}
-
-		function getVariableFive(frequency, innerRadius, outerRadius, sampleRate) {
-
-			/*
-				This is the trickiest part, but also the most fun. You can put whatever you want here,
-				but some things will look ~real weird~ or like nothing at all. 
-
-				Try referencing some of the variables made available in this function (frequency,
-				innerRadius, outerRadius, and sampleRate). It's also useful to reference Pi (Math.PI)
-				since the base of the visualization is a circle.
-
-				x and y determines where the line is drawn on the screen and its angle. Using the radius 
-				variables is useful here 
-
-				width and height determine the shape. Using the frequency is useful here.
-
-				But just plugging in numbers is fun, too!
-
-				Try changing the x value to frequency * 2
-
-				Try changing the width to 8
-
-				Don't sweat it if things break. Tinker and see what happens!
-			*/
-
-			const x = innerRadius / 2;
-			const y = ((innerRadius * Math.PI * 2 / sampleRate) * 0.9) / 2;
-			const width = frequency / 2;
-			const height = 3;
-
-			return [x, y, width, height]
+			return 'rgb(' + red + ', ' + green + ',' + blue + ')';
 		}
 	</script>
 </body>
